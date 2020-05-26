@@ -25,6 +25,7 @@ static int coco_ids[] = { 1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,
 
 void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear, int dont_show, int calc_map, int mjpeg_port, int show_imgs, int benchmark_layers, char* chart_path)
 {
+    // 此处读入图片和标注数据　?
     list *options = read_data_cfg(datacfg);
     char *train_images = option_find_str(options, "train", "data/train.txt");
     char *valid_images = option_find_str(options, "valid", train_images);
@@ -39,9 +40,10 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
             exit(-1);
         }
         else fclose(valid_file);
-
+        // 此处设置GPU型号
         cuda_set_device(gpus[0]);
         printf(" Prepare additional network for mAP calculation...\n");
+        // 此处读入模型配置文件 cfg　文件?
         net_map = parse_network_cfg_custom(cfgfile, 1, 1);
         net_map.benchmark_layers = benchmark_layers;
         const int net_classes = net_map.layers[net_map.n - 1].classes;
@@ -51,6 +53,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
 
         char *name_list = option_find_str(options, "names", "data/names.list");
         int names_size = 0;
+        // 此处读入标注文件?
         char **names = get_labels_custom(name_list, &names_size);
         if (net_classes != names_size) {
             printf("\n Error: in the file %s number of names %d that isn't equal to classes=%d in the file %s \n",
@@ -61,6 +64,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     }
 
     srand(time(0));
+    // 此处读入模型配置文件 cfg　文件 ?
     char *base = basecfg(cfgfile);
     printf("%s\n", base);
     float avg_loss = -1;
@@ -104,6 +108,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     layer l = net.layers[net.n - 1];
 
     int classes = l.classes;
+    float jitter = l.jitter;
 
     list *plist = get_paths(train_images);
     int train_images_num = plist->size;
@@ -128,8 +133,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     args.m = plist->size;
     args.classes = classes;
     args.flip = net.flip;
-    args.jitter = l.jitter;
-    args.resize = l.resize;
+    args.jitter = jitter;
     args.num_boxes = l.max_boxes;
     net.num_boxes = args.num_boxes;
     net.train_images_num = train_images_num;
@@ -149,12 +153,10 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     args.show_imgs = show_imgs;
 
 #ifdef OPENCV
-    //int num_threads = get_num_threads();
-    //if(num_threads > 2) args.threads = get_num_threads() - 2;
     args.threads = 6 * ngpus;   // 3 for - Amazon EC2 Tesla V100: p3.2xlarge (8 logical cores) - p3.16xlarge
     //args.threads = 12 * ngpus;    // Ryzen 7 2700X (16 logical cores)
     mat_cv* img = NULL;
-    float max_img_loss = net.max_chart_loss;
+    float max_img_loss = 5;
     int number_of_lines = 100;
     int img_size = 1000;
     char windows_name[100];
@@ -294,12 +296,10 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
         }
 
         if (net.cudnn_half) {
-            if (iteration < net.burn_in * 3) fprintf(stderr, "\n Tensor Cores are disabled until the first %d iterations are reached.\n", 3 * net.burn_in);
-            else fprintf(stderr, "\n Tensor Cores are used.\n");
-            fflush(stderr);
+            if (iteration < net.burn_in * 3) fprintf(stderr, "\n Tensor Cores are disabled until the first %d iterations are reached.", 3 * net.burn_in);
+            else fprintf(stderr, "\n Tensor Cores are used.");
         }
         printf("\n %d: %f, %f avg loss, %f rate, %lf seconds, %d images, %f hours left\n", iteration, loss, avg_loss, get_current_rate(net), (what_time_is_it_now() - time), iteration*imgs, avg_time);
-        fflush(stdout);
 
         int draw_precision = 0;
         if (calc_map && (iteration >= next_map_calc || iteration == net.max_batches)) {
@@ -350,7 +350,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
 
             draw_precision = 1;
         }
-        time_remaining = ((net.max_batches - iteration) / ngpus)*(what_time_is_it_now() - time + load_time) / 60 / 60;
+        time_remaining = (net.max_batches - iteration)*(what_time_is_it_now() - time + load_time) / 60 / 60;
         // set initial value, even if resume training from 10000 iteration
         if (avg_time < 0) avg_time = time_remaining;
         else avg_time = alpha_time * time_remaining + (1 -  alpha_time) * avg_time;
@@ -698,8 +698,7 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
     args.h = net.h;
     args.c = net.c;
     args.type = IMAGE_DATA;
-    const int letter_box = net.letter_box;
-    if (letter_box) args.type = LETTERBOX_DATA;
+    //args.type = LETTERBOX_DATA;
 
     for (t = 0; t < nthreads; ++t) {
         args.path = paths[i + t];
@@ -729,7 +728,8 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
             int w = val[t].w;
             int h = val[t].h;
             int nboxes = 0;
-            detection *dets = get_network_boxes(&net, w, h, thresh, .5, map, 0, &nboxes, letter_box);
+            int letterbox = (args.type == LETTERBOX_DATA);
+            detection *dets = get_network_boxes(&net, w, h, thresh, .5, map, 0, &nboxes, letterbox);
             if (nms) {
                 if (l.nms_kind == DEFAULT_NMS) do_nms_sort(dets, nboxes, l.classes, nms);
                 else diounms_sort(dets, nboxes, l.classes, nms, l.nms_kind, l.beta_nms);
@@ -1625,7 +1625,9 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
             if (l.nms_kind == DEFAULT_NMS) do_nms_sort(dets, nboxes, l.classes, nms);
             else diounms_sort(dets, nboxes, l.classes, nms, l.nms_kind, l.beta_nms);
         }
-        draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
+	//TODO 38
+        // draw_detections_v4(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
+        draw_detections_v5(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
         save_image(im, "predictions");
         if (!dont_show) {
             show_image(im, "predictions");
@@ -1883,8 +1885,6 @@ void run_detector(int argc, char **argv)
     check_mistakes = find_arg(argc, argv, "-check_mistakes");
     int show_imgs = find_arg(argc, argv, "-show_imgs");
     int mjpeg_port = find_int_arg(argc, argv, "-mjpeg_port", -1);
-    int avgframes = find_int_arg(argc, argv, "-avgframes", 3);
-    int dontdraw_bbox = find_arg(argc, argv, "-dontdraw_bbox");
     int json_port = find_int_arg(argc, argv, "-json_port", -1);
     char *http_post_host = find_char_arg(argc, argv, "-http_post_host", 0);
     int time_limit_sec = find_int_arg(argc, argv, "-time_limit_sec", 0);
@@ -1959,8 +1959,8 @@ void run_detector(int argc, char **argv)
         if (filename)
             if (strlen(filename) > 0)
                 if (filename[strlen(filename) - 1] == 0x0d) filename[strlen(filename) - 1] = 0;
-        demo(cfg, weights, thresh, hier_thresh, cam_index, filename, names, classes, avgframes, frame_skip, prefix, out_filename,
-            mjpeg_port, dontdraw_bbox, json_port, dont_show, ext_output, letter_box, time_limit_sec, http_post_host, benchmark, benchmark_layers);
+        demo(cfg, weights, thresh, hier_thresh, cam_index, filename, names, classes, frame_skip, prefix, out_filename,
+            mjpeg_port, json_port, dont_show, ext_output, letter_box, time_limit_sec, http_post_host, benchmark, benchmark_layers);
 
         free_list_contents_kvp(options);
         free_list(options);

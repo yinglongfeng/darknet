@@ -513,9 +513,10 @@ static inline int popcnt_32(uint32_t val32) {
 }
 //----------------------------
 
+
 #if (defined(__AVX__) && defined(__x86_64__)) || (defined(_WIN64) && !defined(__MINGW32__))
 
-#if (defined(_WIN64) && !defined(__MINGW64__))
+#ifdef _WIN64
 #include <intrin.h>
 #include <ammintrin.h>
 #include <immintrin.h>

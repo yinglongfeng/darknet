@@ -38,7 +38,6 @@ void *xcalloc(size_t nmemb, size_t size) {
     if(!ptr) {
         calloc_error();
     }
-    memset(ptr, 0, nmemb * size);
     return ptr;
 }
 
@@ -329,19 +328,19 @@ void error(const char *s)
 
 void malloc_error()
 {
-    fprintf(stderr, "xMalloc error - possibly out of CPU RAM \n");
+    fprintf(stderr, "xMalloc error\n");
     exit(EXIT_FAILURE);
 }
 
 void calloc_error()
 {
-    fprintf(stderr, "Calloc error - possibly out of CPU RAM \n");
+    fprintf(stderr, "Calloc error\n");
     exit(EXIT_FAILURE);
 }
 
 void realloc_error()
 {
-    fprintf(stderr, "Realloc error - possibly out of CPU RAM \n");
+    fprintf(stderr, "Realloc error\n");
     exit(EXIT_FAILURE);
 }
 
@@ -579,12 +578,10 @@ void mean_arrays(float **a, int n, int els, float *avg)
     int j;
     memset(avg, 0, els*sizeof(float));
     for(j = 0; j < n; ++j){
-        #pragma omp parallel for
         for(i = 0; i < els; ++i){
             avg[i] += a[j][i];
         }
     }
-    #pragma omp parallel for
     for(i = 0; i < els; ++i){
         avg[i] /= n;
     }
@@ -656,6 +653,23 @@ void translate_array(float *a, int n, float s)
         a[i] += s;
     }
 }
+//TODO 43
+float wing_loss(float *a, int n)
+{
+    float w = 10.0;
+    float e = 2.0;
+    int i;
+    float sum = 0;
+    float C = w - (w * log(1 + w / e ));
+    for(i = 0; i < n; ++i){
+        float error = a[i] > 0 ? a[i]:a[i]*-1;
+        // if (error != 0) printf("%f \n",error);
+        if (error < w) sum += w * log(1 + error / e);
+        else sum += error - C;
+        
+    }
+    return sum;
+}
 
 float mag_array(float *a, int n)
 {
@@ -663,9 +677,23 @@ float mag_array(float *a, int n)
     float sum = 0;
     for(i = 0; i < n; ++i){
         sum += a[i]*a[i];
+        // sum += abs(a[i]);
     }
     return sqrt(sum);
 }
+
+//TODO 44
+float mae_array(float *a, int n)
+{
+    int i;
+    float sum = 0;
+    for(i = 0; i < n; ++i){
+        // sum += a[i]*a[i];
+        sum += a[i] > 0 ? a[i]:a[i]*-1;
+    }
+    return sum;
+}
+
 
 // indicies to skip is a bit array
 float mag_array_skip(float *a, int n, int * indices_to_skip)

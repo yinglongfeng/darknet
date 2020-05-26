@@ -771,11 +771,10 @@ detection *make_network_boxes(network *net, float thresh, int *num)
     for (i = 0; i < nboxes; ++i) {
         dets[i].prob = (float*)xcalloc(l.classes, sizeof(float));
         // tx,ty,tw,th uncertainty
-        if(l.type == GAUSSIAN_YOLO) dets[i].uc = (float*)xcalloc(4, sizeof(float)); // Gaussian_YOLOv3
-        else dets[i].uc = NULL;
-
-        if (l.coords > 4) dets[i].mask = (float*)xcalloc(l.coords - 4, sizeof(float));
-        else dets[i].mask = NULL;
+        dets[i].uc = (float*)xcalloc(4, sizeof(float)); // Gaussian_YOLOv3
+        if (l.coords > 4) {
+            dets[i].mask = (float*)xcalloc(l.coords - 4, sizeof(float));
+        }
     }
     return dets;
 }
@@ -790,12 +789,9 @@ detection *make_network_boxes_batch(network *net, float thresh, int *num, int ba
     detection* dets = (detection*)calloc(nboxes, sizeof(detection));
     for (i = 0; i < nboxes; ++i) {
         dets[i].prob = (float*)calloc(l.classes, sizeof(float));
-        // tx,ty,tw,th uncertainty
-        if (l.type == GAUSSIAN_YOLO) dets[i].uc = (float*)xcalloc(4, sizeof(float)); // Gaussian_YOLOv3
-        else dets[i].uc = NULL;
-
-        if (l.coords > 4) dets[i].mask = (float*)xcalloc(l.coords - 4, sizeof(float));
-        else dets[i].mask = NULL;
+        if (l.coords > 4) {
+            dets[i].mask = (float*)calloc(l.coords - 4, sizeof(float));
+        }
     }
     return dets;
 }
@@ -824,12 +820,15 @@ void custom_get_region_detections(layer l, int w, int h, int net_w, int net_h, f
 }
 
 void fill_network_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, detection *dets, int letter)
-{
+{   
+    
     int prev_classes = -1;
     int j;
     for (j = 0; j < net->n; ++j) {
         layer l = net->layers[j];
+       
         if (l.type == YOLO) {
+           
             int count = get_yolo_detections(l, w, h, net->w, net->h, thresh, map, relative, dets, letter);
             dets += count;
             if (prev_classes < 0) prev_classes = l.classes;
@@ -839,15 +838,18 @@ void fill_network_boxes(network *net, int w, int h, float thresh, float hier, in
             }
         }
         if (l.type == GAUSSIAN_YOLO) {
+     
             int count = get_gaussian_yolo_detections(l, w, h, net->w, net->h, thresh, map, relative, dets, letter);
             dets += count;
         }
         if (l.type == REGION) {
+          
             custom_get_region_detections(l, w, h, net->w, net->h, thresh, map, hier, relative, dets, letter);
             //get_region_detections(l, w, h, net->w, net->h, thresh, map, hier, relative, dets);
             dets += l.w*l.h*l.n;
         }
         if (l.type == DETECTION) {
+        
             get_detection_detections(l, w, h, thresh, dets);
             dets += l.w*l.h*l.n;
         }
@@ -855,7 +857,8 @@ void fill_network_boxes(network *net, int w, int h, float thresh, float hier, in
 }
 
 void fill_network_boxes_batch(network *net, int w, int h, float thresh, float hier, int *map, int relative, detection *dets, int letter, int batch)
-{
+{   
+
     int prev_classes = -1;
     int j;
     for (j = 0; j < net->n; ++j) {
@@ -883,6 +886,7 @@ void fill_network_boxes_batch(network *net, int w, int h, float thresh, float hi
 
 detection *get_network_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, int *num, int letter)
 {
+
     detection *dets = make_network_boxes(net, thresh, num);
     fill_network_boxes(net, w, h, thresh, hier, map, relative, dets, letter);
     return dets;
@@ -935,14 +939,14 @@ char *detection_to_json(detection *dets, int nboxes, int classes, char **names, 
         for (j = 0; j < classes; ++j) {
             int show = strncmp(names[j], "dont_show", 9);
             if (dets[i].prob[j] > thresh && show)
-            {
+            {    
                 if (class_id != -1) strcat(send_buf, ", \n");
                 class_id = j;
                 char *buf = (char *)calloc(2048, sizeof(char));
                 if (!buf) return 0;
                 //sprintf(buf, "{\"image_id\":%d, \"category_id\":%d, \"bbox\":[%f, %f, %f, %f], \"score\":%f}",
                 //    image_id, j, dets[i].bbox.x, dets[i].bbox.y, dets[i].bbox.w, dets[i].bbox.h, dets[i].prob[j]);
-
+           
                 sprintf(buf, "  {\"class_id\":%d, \"name\":\"%s\", \"relative_coordinates\":{\"center_x\":%f, \"center_y\":%f, \"width\":%f, \"height\":%f}, \"confidence\":%f}",
                     j, names[j], dets[i].bbox.x, dets[i].bbox.y, dets[i].bbox.w, dets[i].bbox.h, dets[i].prob[j]);
 
@@ -1221,7 +1225,7 @@ void fuse_conv_batchnorm(network net)
 #endif
             }
         }
-        else  if (l->type == SHORTCUT && l->weights && l->weights_normalization)
+        else  if (l->type == SHORTCUT && l->weights && l->weights_normalizion)
         {
             if (l->nweights > 0) {
                 //cuda_pull_array(l.weights_gpu, l.weights, l.nweights);
@@ -1238,7 +1242,7 @@ void fuse_conv_batchnorm(network net)
             {
                 float sum = 1, max_val = -FLT_MAX;
 
-                if (l->weights_normalization == SOFTMAX_NORMALIZATION) {
+                if (l->weights_normalizion == SOFTMAX_NORMALIZATION) {
                     for (i = 0; i < (l->n + 1); ++i) {
                         int w_index = chan + i * layer_step;
                         float w = l->weights[w_index];
@@ -1252,20 +1256,20 @@ void fuse_conv_batchnorm(network net)
                 for (i = 0; i < (l->n + 1); ++i) {
                     int w_index = chan + i * layer_step;
                     float w = l->weights[w_index];
-                    if (l->weights_normalization == RELU_NORMALIZATION) sum += lrelu(w);
-                    else if (l->weights_normalization == SOFTMAX_NORMALIZATION) sum += expf(w - max_val);
+                    if (l->weights_normalizion == RELU_NORMALIZATION) sum += lrelu(w);
+                    else if (l->weights_normalizion == SOFTMAX_NORMALIZATION) sum += expf(w - max_val);
                 }
 
                 for (i = 0; i < (l->n + 1); ++i) {
                     int w_index = chan + i * layer_step;
                     float w = l->weights[w_index];
-                    if (l->weights_normalization == RELU_NORMALIZATION) w = lrelu(w) / sum;
-                    else if (l->weights_normalization == SOFTMAX_NORMALIZATION) w = expf(w - max_val) / sum;
+                    if (l->weights_normalizion == RELU_NORMALIZATION) w = lrelu(w) / sum;
+                    else if (l->weights_normalizion == SOFTMAX_NORMALIZATION) w = expf(w - max_val) / sum;
                     l->weights[w_index] = w;
                 }
             }
 
-            l->weights_normalization = NO_NORMALIZATION;
+            l->weights_normalizion = NO_NORMALIZATION;
 
 #ifdef GPU
             if (gpu_index >= 0) {
